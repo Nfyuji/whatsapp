@@ -42,10 +42,27 @@ app = FastAPI(title="WhatsApp Daily Reports", version="1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
+def _serve_page(filename: str):
+    path = (WEB / filename).resolve()
+    if not str(path).startswith(str(WEB.resolve())):
+        raise HTTPException(403, "Forbidden")
+    if not path.is_file():
+        raise HTTPException(
+            503,
+            f"ملف الواجهة غير موجود على السيرفر ({filename}). "
+            "تأكد من رفع مجلد web/ إلى GitHub ثم أعد النشر.",
+        )
+    return FileResponse(path)
+
+
 @app.on_event("startup")
 def _startup():
     init_db()
     start_scheduler()
+    if WEB.is_dir():
+        print(f"[startup] web folder OK: {WEB}")
+    else:
+        print(f"[startup] WARNING: web folder MISSING at {WEB}")
 
 
 class SettingsBody(BaseModel):
@@ -83,7 +100,16 @@ class WebhookBody(BaseModel):
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "service": "whatsapp-reports"}
+    return {
+        "ok": True,
+        "service": "whatsapp-reports",
+        "web_folder": WEB.is_dir(),
+        "pages": {
+            "analysis": (WEB / "analysis.html").is_file(),
+            "reports": (WEB / "reports.html").is_file(),
+            "settings": (WEB / "settings.html").is_file(),
+        },
+    }
 
 
 @app.get("/api/dashboard")
@@ -199,24 +225,28 @@ async def green_webhook(request: Request):
     return handle_reply(phone, text)
 
 
-if WEB.exists():
+if (WEB / "assets").is_dir():
     app.mount("/assets", StaticFiles(directory=WEB / "assets"), name="assets")
 
-    @app.get("/")
-    def index():
-        return FileResponse(WEB / "analysis.html")
 
-    @app.get("/analysis.html")
-    def page_analysis():
-        return FileResponse(WEB / "analysis.html")
+@app.get("/")
+def index():
+    return _serve_page("analysis.html")
 
-    @app.get("/reports.html")
-    def page_reports():
-        return FileResponse(WEB / "reports.html")
 
-    @app.get("/settings.html")
-    def page_settings():
-        return FileResponse(WEB / "settings.html")
+@app.get("/analysis.html")
+def page_analysis():
+    return _serve_page("analysis.html")
+
+
+@app.get("/reports.html")
+def page_reports():
+    return _serve_page("reports.html")
+
+
+@app.get("/settings.html")
+def page_settings():
+    return _serve_page("settings.html")
 
 
 def main():

@@ -122,11 +122,28 @@ whatsapp/
 ├── requirements.txt
 ├── render.yaml        ← Blueprint
 ├── config.example.json
-├── web/               ← HTML/JS (يُخدم عبر FastAPI StaticFiles)
+├── web/               ← ⚠️ مطلوب — بدونه الصفحات 404
 │   ├── analysis.html
 │   ├── reports.html
-│   └── settings.html
+│   ├── settings.html
+│   └── assets/
+│       ├── app.js
+│       ├── layout.js
+│       ├── styles.css
+│       └── ...
 └── data/              ← محلي فقط — على Render يُستخدم /data
+```
+
+### إذا ظهر `{"detail":"Not Found"}`
+
+1. افتح: `https://whatsapp1-7sdw.onrender.com/api/health`
+2. إذا `"web_folder": false` → مجلد `web/` **غير مرفوع** على GitHub
+3. ارفع مجلد `web/` كاملاً ثم **Manual Deploy** في Render
+
+```bash
+git add web/
+git commit -m "Add web UI files"
+git push
 ```
 
 ---
