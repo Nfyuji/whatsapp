@@ -1,0 +1,13 @@
+{
+  "whatsapp": {
+    "enabled": true,
+    "provider": "green_api",
+    "default_country_code": "967",
+    "green_api": {
+      "instance_id": "YOUR_INSTANCE_ID",
+      "api_token": "YOUR_API_TOKEN",
+      "api_host": "7107.api.greenapi.com"
+    }
+  },
+  "public_base_url": "https://your-app.onrender.com"
+}
