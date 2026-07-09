@@ -1,5 +1,7 @@
 # تعليقات رفع تطبيق WhatsApp على Render
 
+**الرابط الحي:** https://whatsapp1-7sdw.onrender.com
+
 > **مهم:** Render اقترح **Static Site** لأن المجلد فيه ملفات HTML/CSS/JS — لكن هذا **ليس** موقعاً ثابتاً.  
 > التطبيق خادم **Python (FastAPI)** يحتاج API + Webhook + جدولة + قاعدة بيانات SQLite.
 
@@ -70,10 +72,10 @@
 ## بعد النشر — خطوات الإعداد
 
 1. افتح رابط التطبيق:  
-   `https://whatsapp-xxxx.onrender.com`
+   `https://whatsapp1-7sdw.onrender.com`
 
 2. اذهب إلى **الإعدادات**:  
-   `https://YOUR-APP.onrender.com/settings.html`
+   `https://whatsapp1-7sdw.onrender.com/settings.html`
 
 3. أضف:
    - **Green API** — `instance_id` + `api_token` + `api_host`
@@ -83,10 +85,10 @@
    - **الجدولة** — 19:00 سؤال، 00:00 تقرير، UTC+3
 
 4. في حقل **رابط السيرفر العام** ضع:  
-   `https://YOUR-APP.onrender.com`
+   `https://whatsapp1-7sdw.onrender.com`
 
 5. اضغط **ضبط Webhook** — يسجل في Green API:  
-   `https://YOUR-APP.onrender.com/api/webhook/green`
+   `https://whatsapp1-7sdw.onrender.com/api/webhook/green`
 
 6. فعّل **تشغيل الأتمتة** واحفظ.
 

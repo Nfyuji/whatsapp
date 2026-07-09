@@ -23,6 +23,8 @@ start.bat
 
 يفتح على: **http://localhost:8090**
 
+**الإنتاج (Render):** https://whatsapp1-7sdw.onrender.com
+
 ## الرفع على Render
 
 1. ارفع مجلد `whatsapp/` كمستودع أو subdirectory
@@ -31,7 +33,7 @@ start.bat
 4. أضف Green API + رابط السيرفر العام
 5. اضغط **ضبط Webhook**
 
-Webhook: `https://YOUR-APP.onrender.com/api/webhook/green`
+Webhook: `https://whatsapp1-7sdw.onrender.com/api/webhook/green`
 
 ## الجدولة
 
