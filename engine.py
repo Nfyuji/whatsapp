@@ -58,6 +58,38 @@ def run_daily_ask(*, force: bool = False) -> dict[str, Any]:
     return {"ok": bool(sent), "sent": len(sent), "errors": errors, "date": today}
 
 
+def run_ask_employee(employee_id: str, *, force: bool = True) -> dict[str, Any]:
+    settings = load_settings()
+    cfg = load_config()
+    if not is_enabled(cfg):
+        return {"ok": False, "error": "WhatsApp معطّل — أضف Green API في الإعدادات"}
+
+    from store import get_employee
+
+    emp = get_employee(employee_id)
+    if not emp or not emp.get("active"):
+        return {"ok": False, "error": "الموظف غير موجود"}
+
+    tz = int(settings["timezone_offset_hours"])
+    today = local_today(tz)
+    tpl = settings.get("ask_message") or "السلام عليكم {name}\nماذا أنجزت اليوم؟"
+    phone = emp.get("phone") or ""
+    if not phone:
+        return {"ok": False, "error": "لا يوجد رقم للموظف"}
+
+    msg = tpl.replace("{name}", emp.get("name", "الموظف"))
+    try:
+        send_message(msg, phone, cfg)
+        upsert_daily(
+            today, emp["id"],
+            employee_name=emp["name"], phone=phone,
+            question_sent=1, question_sent_at=datetime.now(timezone.utc).isoformat(),
+        )
+        return {"ok": True, "sent": 1, "employee": emp["name"], "date": today}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
 def handle_reply(phone: str, text: str) -> dict[str, Any]:
     digits = re.sub(r"\D", "", phone)
     row = find_pending_reply(digits)

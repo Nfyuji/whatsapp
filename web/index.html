@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>تقارير واتس — لوحة التحكم</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/fontawesome/css/all.min.css?v=4" />
+  <link rel="stylesheet" href="/assets/styles.css?v=5" />
+</head>
+<body data-page="dashboard">
+  <div id="page-main">
+
+    <!-- ═══ الرئيسية ═══ -->
+    <div class="dash-panel active" id="panel-overview" data-panel="overview">
+      <div class="wa-hero">
+        <div class="wa-hero-text">
+          <span class="wa-badge"><i class="fab fa-whatsapp"></i> Green API</span>
+          <h2>لوحة التحكم</h2>
+          <p>توقيت مكة المكرمة · متابعة يومية · إرسال فوري أو جدولة تلقائية</p>
+        </div>
+        <div class="wa-hero-actions">
+          <button type="button" class="btn btn-outline" id="btn-ask"><i class="fas fa-paper-plane"></i> إرسال فوري — السؤال</button>
+          <button type="button" class="btn btn-primary" id="btn-report"><i class="fas fa-chart-bar"></i> إرسال فوري — التقرير</button>
+        </div>
+      </div>
+
+      <div class="status-row" id="status-row"></div>
+      <div class="stats-row" id="stats"></div>
+
+      <div class="schedule-summary" id="schedule-summary">
+        <div><i class="fas fa-clock"></i> الوقت الحالي (مكة): <strong id="now-local">—</strong></div>
+        <div id="schedule-lines">—</div>
+      </div>
+
+      <section class="card">
+        <div class="card-head flex-head">
+          <h3><i class="fas fa-inbox"></i> ملخص اليوم — <span id="report-date">—</span></h3>
+          <button type="button" class="btn btn-outline btn-sm" data-goto="reports"><i class="fas fa-arrow-left"></i> كل التقارير</button>
+        </div>
+        <div class="report-feed" id="feed-overview"></div>
+      </section>
+    </div>
+
+    <!-- ═══ الموظفون ═══ -->
+    <div class="dash-panel" id="panel-employees" data-panel="employees">
+      <div class="page-head">
+        <h2><i class="fas fa-users"></i> إدارة الموظفين</h2>
+        <p>إضافة · تعديل · إرسال سؤال فردي · حذف</p>
+      </div>
+
+      <section class="card">
+        <div class="card-head">
+          <h3><i class="fas fa-user-plus"></i> إضافة موظف جديد</h3>
+          <span class="muted" id="emp-count">0 موظف</span>
+        </div>
+        <form id="emp-form" class="grid-2 emp-form">
+          <div class="form-row"><label>الاسم</label><input name="name" required placeholder="اسم الموظف" /></div>
+          <div class="form-row"><label>رقم WhatsApp</label><input name="phone" dir="ltr" placeholder="967775270446" required /></div>
+          <div class="form-row"><label>القسم</label><input name="department" placeholder="اختياري" /></div>
+          <div class="form-row form-row--btn"><button type="submit" class="btn btn-primary full"><i class="fas fa-plus"></i> إضافة</button></div>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="card-head flex-head">
+          <h3><i class="fas fa-list"></i> قائمة الموظفين</h3>
+          <input type="search" id="emp-search" class="input-search" placeholder="بحث بالاسم أو الرقم..." />
+        </div>
+        <div class="emp-table-wrap">
+          <table class="emp-table" id="emp-table">
+            <thead>
+              <tr>
+                <th>الموظف</th>
+                <th>الرقم</th>
+                <th>القسم</th>
+                <th>حالة اليوم</th>
+                <th>إجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="emp-tbody"></tbody>
+          </table>
+        </div>
+        <p class="empty hidden" id="emp-empty">لا يوجد موظفون — أضف أول موظف أعلاه</p>
+      </section>
+    </div>
+
+    <!-- ═══ التقارير ═══ -->
+    <div class="dash-panel" id="panel-reports" data-panel="reports">
+      <div class="page-head">
+        <h2><i class="fas fa-chart-line"></i> التقارير والردود</h2>
+        <p>متابعة ردود الموظفين ومعاينة وإرسال تقرير المدير</p>
+      </div>
+
+      <div class="stats-row" id="stats-reports"></div>
+
+      <section class="card">
+        <div class="card-head flex-head">
+          <h3><i class="fas fa-calendar"></i> اختيار التاريخ</h3>
+          <div class="flex">
+            <select id="date-select" class="input-date"></select>
+            <input type="date" id="date-filter" class="input-date" />
+            <button type="button" class="btn btn-outline btn-sm" id="btn-refresh-report"><i class="fas fa-sync"></i></button>
+          </div>
+        </div>
+        <div class="date-chips" id="dates-list"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h3><i class="fas fa-inbox"></i> ردود الموظفين</h3></div>
+        <div class="report-feed" id="feed"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head flex-head">
+          <h3><i class="fas fa-file-alt"></i> معاينة تقرير المدير</h3>
+          <button type="button" class="btn btn-primary btn-sm" id="btn-send-report"><i class="fas fa-paper-plane"></i> إرسال للمدير</button>
+        </div>
+        <pre class="preview-box" id="preview">—</pre>
+      </section>
+    </div>
+
+    <!-- ═══ الإعدادات ═══ -->
+    <div class="dash-panel" id="panel-settings" data-panel="settings">
+      <div class="page-head">
+        <h2><i class="fas fa-cog"></i> الإعدادات</h2>
+        <p>الجدولة · الرسائل · Green API · Webhook</p>
+      </div>
+
+      <div class="dash-grid dash-grid--2">
+        <section class="card">
+          <div class="card-head">
+            <h3><i class="fas fa-clock"></i> الجدولة والرسائل</h3>
+            <span class="tz-badge"><i class="fas fa-mosque"></i> مكة</span>
+          </div>
+          <div class="toggle-row">
+            <label class="checkbox">
+              <input type="checkbox" id="enabled" />
+              <span>تفعيل <strong>الجدولة التلقائية</strong></span>
+            </label>
+          </div>
+          <div class="grid-2">
+            <div class="form-row">
+              <label><i class="fas fa-moon"></i> وقت سؤال الموظفين</label>
+              <div class="time-12">
+                <select id="ask-hour-12"></select><span>:</span>
+                <select id="ask-minute"></select>
+                <select id="ask-ampm"><option value="am">ص</option><option value="pm">م</option></select>
+              </div>
+            </div>
+            <div class="form-row">
+              <label><i class="fas fa-star"></i> وقت تقرير المدير</label>
+              <div class="time-12">
+                <select id="report-hour-12"></select><span>:</span>
+                <select id="report-minute"></select>
+                <select id="report-ampm"><option value="am">ص</option><option value="pm">م</option></select>
+              </div>
+            </div>
+            <div class="form-row form-row--full">
+              <label>رقم المدير</label>
+              <input type="text" id="manager-phone" dir="ltr" placeholder="967770014732" />
+            </div>
+            <div class="form-row form-row--full">
+              <label>اسم الشركة</label>
+              <input type="text" id="company-name" placeholder="اسم الشركة" />
+            </div>
+          </div>
+          <div class="form-row">
+            <label><i class="fas fa-calendar-week"></i> أيام التشغيل</label>
+            <div class="day-chips" id="days"></div>
+          </div>
+          <div class="form-row"><label>رسالة السؤال ({name})</label><textarea id="ask-msg" rows="3"></textarea></div>
+          <div class="form-row"><label>رد الشكر التلقائي</label><input type="text" id="thank-msg" /></div>
+          <div class="form-row"><label>عنوان تقرير المدير</label><input type="text" id="report-header" /></div>
+          <button type="button" class="btn btn-primary" id="save-settings"><i class="fas fa-save"></i> حفظ الإعدادات</button>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><h3><i class="fas fa-plug"></i> Green API + Webhook</h3></div>
+          <div class="grid-2">
+            <div class="form-row"><label>Instance ID</label><input id="ga-instance" dir="ltr" /></div>
+            <div class="form-row"><label>API Token</label><input id="ga-token" type="password" dir="ltr" placeholder="الصق التوكن الكامل من Green API" autocomplete="off" /></div>
+            <div class="form-row"><label>API Host</label><input id="ga-host" dir="ltr" value="7107.api.greenapi.com" /></div>
+            <div class="form-row"><label>كود الدولة</label><input id="ga-country" dir="ltr" value="967" /></div>
+          </div>
+          <div class="form-row"><label>رابط السيرفر</label><input id="public-url" dir="ltr" /></div>
+          <div class="webhook-box" id="webhook-display">Webhook: —</div>
+          <div class="flex">
+            <button type="button" class="btn btn-outline" id="save-green"><i class="fas fa-save"></i> حفظ Green API</button>
+            <button type="button" class="btn btn-primary" id="setup-webhook"><i class="fas fa-link"></i> ضبط Webhook</button>
+          </div>
+        </section>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- تعديل موظف -->
+  <div id="emp-modal" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3><i class="fas fa-user-edit"></i> تعديل موظف</h3>
+        <button type="button" class="btn-icon" id="modal-close"><i class="fas fa-times"></i></button>
+      </div>
+      <form id="emp-edit-form">
+        <input type="hidden" name="id" />
+        <div class="form-row"><label>الاسم</label><input name="name" required /></div>
+        <div class="form-row"><label>رقم WhatsApp</label><input name="phone" dir="ltr" required /></div>
+        <div class="form-row"><label>القسم</label><input name="department" /></div>
+        <label class="checkbox"><input type="checkbox" name="active" checked /> نشط</label>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" id="modal-cancel">إلغاء</button>
+          <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> حفظ</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/assets/layout.js?v=5"></script>
+  <script src="/assets/app.js?v=5"></script>
+  <script src="/assets/dashboard.js?v=5"></script>
+</body>
+</html>

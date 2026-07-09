@@ -18,6 +18,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "report_hour": 0,
     "report_minute": 0,
     "timezone_offset_hours": 3,
+    "timezone_name": "مكة المكرمة",
     "days_of_week": [0, 1, 2, 3, 4, 5, 6],
     "ask_message": "السلام عليكم {name} 🌙\n\nماذا أنجزت اليوم؟\nاكتب ملخص عملك باختصار.",
     "thank_message": "شكراً لكم 🙏\nتم تسجيل تقريرك بنجاح.",
@@ -50,7 +51,40 @@ def _fix_settings(raw: dict) -> dict:
     s.update({k: v for k, v in raw.items() if v is not None})
     days = s.get("days_of_week") or list(range(7))
     s["days_of_week"] = sorted(set(int(d) for d in days if 0 <= int(d) <= 6))
+    s["timezone_offset_hours"] = 3
+    s["timezone_name"] = "مكة المكرمة"
     return s
+
+
+DAY_NAMES_AR = ["الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد"]
+
+
+def format_time_ar(h24: int, minute: int = 0) -> str:
+    h = int(h24) % 24
+    m = max(0, min(59, int(minute)))
+    h12 = h % 12 or 12
+    period = "م" if h >= 12 else "ص"
+    return f"{h12}:{m:02d} {period}"
+
+
+def format_now_ar(offset: int = 3) -> str:
+    now = local_now(offset)
+    return f"{format_time_ar(now.hour, now.minute)} — {now.date().isoformat()}"
+
+
+def schedule_summary(settings: dict | None = None) -> dict[str, Any]:
+    s = settings or load_settings()
+    days = s.get("days_of_week") or list(range(7))
+    day_names = [DAY_NAMES_AR[d] for d in sorted(days) if 0 <= d <= 6]
+    return {
+        "timezone": s.get("timezone_name") or "مكة المكرمة",
+        "timezone_offset_hours": 3,
+        "now_local": format_now_ar(3),
+        "ask_time": format_time_ar(s.get("ask_hour", 19), s.get("ask_minute", 0)),
+        "report_time": format_time_ar(s.get("report_hour", 0), s.get("report_minute", 0)),
+        "enabled": bool(s.get("enabled")),
+        "days": day_names,
+    }
 
 
 def load_settings() -> dict:
@@ -125,6 +159,46 @@ def add_employee(name: str, phone: str, department: str = "") -> dict:
         finally:
             conn.close()
     return emp
+
+
+def update_employee(eid: str, **fields) -> dict | None:
+    from notify import phone_digits, load_config
+
+    init_db()
+    with _lock:
+        conn = connect()
+        try:
+            row = conn.execute("SELECT * FROM employees WHERE id=?", (eid,)).fetchone()
+            if not row:
+                return None
+            emp = dict(row)
+            if "name" in fields and fields["name"] is not None:
+                emp["name"] = str(fields["name"]).strip()
+            if "phone" in fields and fields["phone"] is not None:
+                emp["phone"] = phone_digits(str(fields["phone"]), load_config())
+            if "department" in fields and fields["department"] is not None:
+                emp["department"] = str(fields["department"]).strip()
+            if "active" in fields and fields["active"] is not None:
+                emp["active"] = 1 if fields["active"] else 0
+            conn.execute(
+                "UPDATE employees SET name=?, phone=?, department=?, active=? WHERE id=?",
+                (emp["name"], emp["phone"], emp["department"], emp["active"], eid),
+            )
+            conn.commit()
+            return emp
+        finally:
+            conn.close()
+
+
+def get_employee(eid: str) -> dict | None:
+    init_db()
+    with _lock:
+        conn = connect()
+        try:
+            row = conn.execute("SELECT * FROM employees WHERE id=?", (eid,)).fetchone()
+            return dict(row) if row else None
+        finally:
+            conn.close()
 
 
 def delete_employee(eid: str) -> bool:
@@ -255,10 +329,49 @@ def mark_manager_reported(report_date: str) -> None:
             conn.close()
 
 
+def _merge_daily_rows(report_date: str) -> list[dict]:
+    daily_map = {r["employee_id"]: r for r in list_daily(report_date)}
+    rows = []
+    for emp in list_employees(active_only=False):
+        if not emp.get("active"):
+            continue
+        r = daily_map.get(emp["id"], {})
+        rows.append({
+            "id": r.get("id"),
+            "employee_id": emp["id"],
+            "employee_name": emp["name"],
+            "phone": emp["phone"],
+            "department": emp.get("department") or "",
+            "question_sent": int(r.get("question_sent") or 0),
+            "question_sent_at": r.get("question_sent_at"),
+            "reply_text": r.get("reply_text"),
+            "reply_at": r.get("reply_at"),
+            "thank_sent": int(r.get("thank_sent") or 0),
+            "manager_reported": int(r.get("manager_reported") or 0),
+        })
+    return rows
+
+
+def system_status(settings: dict | None = None) -> dict[str, Any]:
+    from notify import is_enabled, load_config
+
+    s = settings or load_settings()
+    cfg = load_config()
+    ga = (cfg.get("whatsapp") or {}).get("green_api") or {}
+    employees = list_employees()
+    return {
+        "green_api": bool(ga.get("instance_id") and ga.get("api_token") and is_enabled(cfg)),
+        "webhook": bool(s.get("webhook_url")),
+        "scheduler": bool(s.get("enabled")),
+        "employees_count": len(employees),
+        "webhook_url": s.get("webhook_url") or "",
+        "last_ask_date": s.get("last_ask_date"),
+        "last_report_date": s.get("last_report_date"),
+    }
 def dashboard(date: str | None = None) -> dict:
     settings = load_settings()
     d = date or local_today(settings["timezone_offset_hours"])
-    rows = list_daily(d)
+    rows = _merge_daily_rows(d)
     employees = list_employees()
     replied = [r for r in rows if r.get("reply_text")]
     asked = [r for r in rows if r.get("question_sent")]
@@ -273,6 +386,8 @@ def dashboard(date: str | None = None) -> dict:
         "reply_rate": rate,
         "rows": rows,
         "settings": settings,
+        "schedule": schedule_summary(settings),
+        "status": system_status(settings),
     }
 
 

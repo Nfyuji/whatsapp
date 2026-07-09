@@ -18,6 +18,7 @@ from engine import (
     build_report_text,
     handle_reply,
     parse_green_webhook,
+    run_ask_employee,
     run_daily_ask,
     run_manager_report,
     setup_webhook,
@@ -28,10 +29,14 @@ from store import (
     add_employee,
     dashboard,
     delete_employee,
+    get_employee,
     list_employees,
     load_settings,
     report_dates,
     save_settings,
+    schedule_summary,
+    system_status,
+    update_employee,
 )
 
 ROOT = Path(__file__).resolve().parent
@@ -86,6 +91,13 @@ class EmployeeBody(BaseModel):
     department: str = ""
 
 
+class EmployeeUpdateBody(BaseModel):
+    name: str | None = None
+    phone: str | None = None
+    department: str | None = None
+    active: bool | None = None
+
+
 class GreenApiBody(BaseModel):
     instance_id: str
     api_token: str
@@ -120,38 +132,58 @@ def api_dashboard(date: str | None = None):
 @app.get("/api/settings")
 def api_get_settings():
     cfg = load_config()
-    return {"settings": load_settings(), "green_api": cfg.get("whatsapp", {})}
+    s = load_settings()
+    wa = dict(cfg.get("whatsapp") or {})
+    ga = dict((wa.get("green_api") or {}))
+    if ga.get("api_token"):
+        ga = {**ga, "api_token": "••••••••", "has_token": True}
+    else:
+        ga = {**ga, "has_token": False}
+    wa["green_api"] = ga
+    return {"settings": s, "green_api": wa, "schedule": schedule_summary(s)}
 
 
 @app.put("/api/settings")
 def api_save_settings(body: SettingsBody):
     payload = body.model_dump(exclude_none=True)
+    payload["timezone_offset_hours"] = 3
     for k in ("ask_message", "thank_message", "manager_report_header", "company_name"):
         if k in payload and not payload[k]:
             payload.pop(k)
     saved = save_settings(payload)
-    return {"ok": True, "settings": saved}
+    return {"ok": True, "settings": saved, "schedule": schedule_summary(saved)}
 
 
 @app.put("/api/green-api")
 def api_green_api(body: GreenApiBody):
+    instance_id = body.instance_id.strip()
+    if not instance_id:
+        raise HTTPException(400, "Instance ID مطلوب")
+
     cfg = load_config()
     existing = (cfg.get("whatsapp") or {}).get("green_api") or {}
     token = body.api_token.strip()
     if not token or "•" in token:
-        token = existing.get("api_token", "")
+        token = (existing.get("api_token") or "").strip()
+    if not token:
+        raise HTTPException(400, "API Token مطلوب — الصق التوكن الكامل ثم احفظ")
+
     cfg["whatsapp"] = {
         "enabled": body.enabled,
         "provider": "green_api",
-        "default_country_code": body.default_country_code,
+        "default_country_code": body.default_country_code.strip() or "967",
         "green_api": {
-            "instance_id": body.instance_id.strip(),
+            "instance_id": instance_id,
             "api_token": token,
-            "api_host": body.api_host.strip(),
+            "api_host": body.api_host.strip() or "7107.api.greenapi.com",
         },
     }
-    save_config(cfg)
-    return {"ok": True}
+    cfg["public_base_url"] = cfg.get("public_base_url") or ""
+    try:
+        save_config(cfg)
+    except OSError as exc:
+        raise HTTPException(500, f"تعذر حفظ الإعدادات على السيرفر: {exc}") from exc
+    return {"ok": True, "message": "تم حفظ Green API", "instance_id": instance_id}
 
 
 @app.get("/api/employees")
@@ -164,6 +196,17 @@ def api_add_employee(body: EmployeeBody):
     if not body.name.strip() or not body.phone.strip():
         raise HTTPException(400, "الاسم والرقم مطلوبان")
     emp = add_employee(body.name, body.phone, body.department)
+    return {"ok": True, "employee": emp}
+
+
+@app.put("/api/employees/{eid}")
+def api_update_employee(eid: str, body: EmployeeUpdateBody):
+    payload = body.model_dump(exclude_none=True)
+    if not payload:
+        raise HTTPException(400, "لا توجد بيانات للتحديث")
+    emp = update_employee(eid, **payload)
+    if not emp:
+        raise HTTPException(404, "الموظف غير موجود")
     return {"ok": True, "employee": emp}
 
 
@@ -192,6 +235,20 @@ def api_run_ask():
     if not r.get("ok") and not r.get("skipped"):
         raise HTTPException(400, r.get("error", "فشل"))
     return r
+
+
+@app.post("/api/run/ask/{eid}")
+def api_run_ask_one(eid: str):
+    r = run_ask_employee(eid, force=True)
+    if not r.get("ok"):
+        raise HTTPException(400, r.get("error", "فشل"))
+    return r
+
+
+@app.get("/api/status")
+def api_status():
+    s = load_settings()
+    return {"ok": True, "status": system_status(s), "schedule": schedule_summary(s)}
 
 
 @app.post("/api/run/report")
@@ -231,22 +288,22 @@ if (WEB / "assets").is_dir():
 
 @app.get("/")
 def index():
-    return _serve_page("analysis.html")
+    return _serve_page("index.html")
 
 
 @app.get("/analysis.html")
 def page_analysis():
-    return _serve_page("analysis.html")
+    return _serve_page("index.html")
 
 
 @app.get("/reports.html")
 def page_reports():
-    return _serve_page("reports.html")
+    return _serve_page("index.html")
 
 
 @app.get("/settings.html")
 def page_settings():
-    return _serve_page("settings.html")
+    return _serve_page("index.html")
 
 
 def main():

@@ -4,13 +4,25 @@ from __future__ import annotations
 
 import json
 import re
+import os
 from pathlib import Path
 from typing import Any
 
 import requests
 
 ROOT = Path(__file__).resolve().parent
-CONFIG_PATH = ROOT / "config.json"
+DATA_DIR = ROOT / "data"
+
+
+def _config_path() -> Path:
+    env = os.environ.get("CONFIG_PATH")
+    if env:
+        return Path(env)
+    db = Path(os.environ.get("DATABASE_PATH", str(DATA_DIR / "app.db")))
+    return db.parent / "config.json"
+
+
+CONFIG_PATH = _config_path()
 
 
 def load_config() -> dict:
@@ -23,6 +35,7 @@ def load_config() -> dict:
 
 
 def save_config(data: dict) -> None:
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     CONFIG_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
