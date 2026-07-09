@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>الإعدادات — تقارير واتس</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="/assets/styles.css?v=1" />
+</head>
+<body data-page="settings">
+  <div id="page-main">
+    <div class="page-head"><h2><i class="fas fa-cog"></i> الإعدادات</h2><p>الموظفون · الرسائل · Green API · Webhook</p></div>
+
+    <div class="card">
+      <div class="card-head"><h3><i class="fas fa-users"></i> الموظفون</h3></div>
+      <form id="emp-form" class="grid-2" style="margin-bottom:1rem">
+        <div class="form-row"><label>الاسم</label><input name="name" required /></div>
+        <div class="form-row"><label>رقم WhatsApp</label><input name="phone" dir="ltr" placeholder="967775270446" required /></div>
+        <div class="form-row"><label>القسم (اختياري)</label><input name="department" /></div>
+        <div class="form-row" style="display:flex;align-items:flex-end"><button type="submit" class="btn btn-primary full"><i class="fas fa-user-plus"></i> إضافة</button></div>
+      </form>
+      <div class="emp-list" id="emp-list"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3><i class="fas fa-comment-dots"></i> ضبط الرد والرسائل</h3></div>
+      <div class="toggle-row">
+        <label class="checkbox"><input type="checkbox" id="enabled" /> تفعيل الأتمتة (7 مساءً + 12 ليلاً)</label>
+      </div>
+      <div class="grid-2">
+        <div class="form-row"><label>سؤال الموظف — الساعة</label><input type="number" id="ask-hour" min="0" max="23" value="19" /></div>
+        <div class="form-row"><label>الدقيقة</label><input type="number" id="ask-minute" min="0" max="59" value="0" /></div>
+        <div class="form-row"><label>تقرير المدير — الساعة</label><input type="number" id="report-hour" min="0" max="23" value="0" /></div>
+        <div class="form-row"><label>الدقيقة</label><input type="number" id="report-minute" min="0" max="59" value="0" /></div>
+        <div class="form-row"><label>فرق UTC</label><input type="number" id="tz" min="-12" max="14" value="3" /></div>
+        <div class="form-row"><label>رقم المدير</label><input type="text" id="manager-phone" dir="ltr" placeholder="967770014732" /></div>
+      </div>
+      <div class="form-row"><label>أيام التشغيل</label><div class="day-chips" id="days"></div></div>
+      <div class="form-row"><label>رسالة السؤال ({name} = اسم الموظف)</label><textarea id="ask-msg" rows="3"></textarea></div>
+      <div class="form-row"><label>رد الشكر التلقائي</label><input type="text" id="thank-msg" /></div>
+      <div class="form-row"><label>عنوان تقرير المدير</label><input type="text" id="report-header" /></div>
+      <button class="btn btn-primary" id="save-settings"><i class="fas fa-save"></i> حفظ الإعدادات</button>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3><i class="fas fa-plug"></i> Green API + Webhook</h3></div>
+      <div class="grid-2">
+        <div class="form-row"><label>Instance ID</label><input id="ga-instance" dir="ltr" /></div>
+        <div class="form-row"><label>API Token</label><input id="ga-token" type="password" dir="ltr" /></div>
+        <div class="form-row"><label>API Host</label><input id="ga-host" dir="ltr" value="7107.api.greenapi.com" /></div>
+        <div class="form-row"><label>كود الدولة</label><input id="ga-country" dir="ltr" value="967" /></div>
+      </div>
+      <div class="form-row"><label>رابط السيرفر العام (للاستضافة)</label><input id="public-url" dir="ltr" placeholder="https://whatsapp1-7sdw.onrender.com" /></div>
+      <p class="muted" id="webhook-display">Webhook: —</p>
+      <div class="flex">
+        <button class="btn btn-outline" id="save-green"><i class="fas fa-save"></i> حفظ Green API</button>
+        <button class="btn btn-primary" id="setup-webhook"><i class="fas fa-link"></i> ضبط Webhook</button>
+      </div>
+    </div>
+  </div>
+  <div id="toast" class="toast hidden"></div>
+  <script src="/assets/layout.js?v=1"></script>
+  <script src="/assets/app.js?v=1"></script>
+  <script src="/assets/settings.js?v=1"></script>
+</body>
+</html>

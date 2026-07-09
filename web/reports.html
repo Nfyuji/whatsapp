@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>إصدار التقارير — تقارير واتس</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="/assets/styles.css?v=1" />
+</head>
+<body data-page="reports">
+  <div id="page-main">
+    <div class="page-head">
+      <h2><i class="fas fa-file-alt"></i> إصدار التقارير</h2>
+      <p>معاينة وإرسال تقرير المدير — 12 ليلاً تلقائياً</p>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <h3>اختر التاريخ</h3>
+        <div class="flex">
+          <select id="date-select" class="form-row" style="width:auto;margin:0"></select>
+          <input type="date" id="date-pick" class="form-row" style="width:auto;margin:0" />
+        </div>
+      </div>
+      <div class="preview-box" id="preview">—</div>
+      <div class="flex" style="margin-top:1rem">
+        <button class="btn btn-outline" id="btn-refresh"><i class="fas fa-sync"></i> تحديث المعاينة</button>
+        <button class="btn btn-primary" id="btn-send"><i class="fab fa-whatsapp"></i> إرسال للمدير</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3><i class="fas fa-history"></i> أيام سابقة</h3></div>
+      <div id="dates-list" class="muted">—</div>
+    </div>
+  </div>
+  <div id="toast" class="toast hidden"></div>
+  <script src="/assets/layout.js?v=1"></script>
+  <script src="/assets/app.js?v=1"></script>
+  <script src="/assets/reports.js?v=1"></script>
+</body>
+</html>
