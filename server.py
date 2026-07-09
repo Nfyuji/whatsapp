@@ -9,7 +9,7 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -29,9 +29,11 @@ from store import (
     add_employee,
     dashboard,
     delete_employee,
+    employee_calendar,
     get_employee,
     list_employees,
     load_settings,
+    local_today,
     report_dates,
     save_settings,
     schedule_summary,
@@ -80,6 +82,8 @@ class SettingsBody(BaseModel):
     days_of_week: list[int] = Field(default_factory=lambda: list(range(7)))
     ask_message: str = ""
     thank_message: str = ""
+    follow_up_enabled: bool = True
+    follow_up_message: str = ""
     manager_report_header: str = ""
     manager_phone: str = ""
     company_name: str = ""
@@ -147,7 +151,7 @@ def api_get_settings():
 def api_save_settings(body: SettingsBody):
     payload = body.model_dump(exclude_none=True)
     payload["timezone_offset_hours"] = 3
-    for k in ("ask_message", "thank_message", "manager_report_header", "company_name"):
+    for k in ("ask_message", "thank_message", "follow_up_message", "manager_report_header", "company_name"):
         if k in payload and not payload[k]:
             payload.pop(k)
     saved = save_settings(payload)
@@ -224,9 +228,38 @@ def api_report_dates():
 @app.get("/api/reports/preview")
 def api_preview(date: str | None = None):
     s = load_settings()
-    from store import local_today
     d = date or local_today(s["timezone_offset_hours"])
     return {"date": d, "text": build_report_text(d)}
+
+
+@app.get("/api/reports/pdf")
+def api_report_pdf(date: str | None = None):
+    from pdf_report import generate_pdf
+
+    s = load_settings()
+    d = date or local_today(s["timezone_offset_hours"])
+    try:
+        pdf = generate_pdf(d)
+    except Exception as exc:
+        raise HTTPException(500, f"فشل PDF: {exc}") from exc
+    fname = f"report-{d}.pdf"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+@app.get("/api/employees/{eid}/calendar")
+def api_employee_calendar(eid: str, year: int | None = None, month: int | None = None):
+    s = load_settings()
+    now = __import__("store").local_now(int(s["timezone_offset_hours"]))
+    y = year or now.year
+    m = month or now.month
+    data = employee_calendar(eid, y, m)
+    if not data.get("ok"):
+        raise HTTPException(404, data.get("error", "غير موجود"))
+    return data
 
 
 @app.post("/api/run/ask")
@@ -293,17 +326,22 @@ def index():
 
 @app.get("/analysis.html")
 def page_analysis():
-    return _serve_page("index.html")
+    return RedirectResponse("/", status_code=302)
 
 
 @app.get("/reports.html")
 def page_reports():
-    return _serve_page("index.html")
+    return RedirectResponse("/#reports", status_code=302)
 
 
 @app.get("/settings.html")
 def page_settings():
-    return _serve_page("index.html")
+    return RedirectResponse("/#settings", status_code=302)
+
+
+@app.get("/favicon.svg")
+def favicon():
+    return _serve_page("favicon.svg")
 
 
 def main():

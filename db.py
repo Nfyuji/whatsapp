@@ -64,10 +64,19 @@ def init_db() -> None:
         conn = connect()
         try:
             conn.executescript(SCHEMA)
+            _migrate(conn)
             conn.commit()
             _initialized = True
         finally:
             conn.close()
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(daily_reports)").fetchall()}
+    if "first_reply_text" not in cols:
+        conn.execute("ALTER TABLE daily_reports ADD COLUMN first_reply_text TEXT")
+    if "awaiting_detail" not in cols:
+        conn.execute("ALTER TABLE daily_reports ADD COLUMN awaiting_detail INTEGER DEFAULT 0")
 
 
 def now_iso() -> str:

@@ -22,6 +22,14 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "days_of_week": [0, 1, 2, 3, 4, 5, 6],
     "ask_message": "السلام عليكم {name} 🌙\n\nماذا أنجزت اليوم؟\nاكتب ملخص عملك باختصار.",
     "thank_message": "شكراً لكم 🙏\nتم تسجيل تقريرك بنجاح.",
+    "follow_up_enabled": True,
+    "follow_up_message": (
+        "شكراً على ردك 🙏\n\n"
+        "الرجاء كتابة *جميع المهام* التي أنجزتها اليوم في *رسالة واحدة* ومفصّلة:\n"
+        "• ماذا أنجزت؟\n"
+        "• ما النتائج؟\n"
+        "• هل واجهت أي عوائق؟"
+    ),
     "manager_report_header": "📊 تقرير يومي — عمل الموظفين",
     "manager_phone": "",
     "company_name": "WhatsApp Reports",
@@ -229,7 +237,8 @@ def upsert_daily(report_date: str, employee_id: str, **kwargs) -> dict:
                         data[k] = v
                 conn.execute(
                     """UPDATE daily_reports SET employee_name=?, phone=?, question_sent=?,
-                       question_sent_at=?, reply_text=?, reply_at=?, thank_sent=?, manager_reported=?
+                       question_sent_at=?, reply_text=?, reply_at=?, thank_sent=?, manager_reported=?,
+                       first_reply_text=?, awaiting_detail=?
                        WHERE id=?""",
                     (
                         data.get("employee_name", ""),
@@ -240,6 +249,8 @@ def upsert_daily(report_date: str, employee_id: str, **kwargs) -> dict:
                         data.get("reply_at"),
                         int(data.get("thank_sent") or 0),
                         int(data.get("manager_reported") or 0),
+                        data.get("first_reply_text"),
+                        int(data.get("awaiting_detail") or 0),
                         data["id"],
                     ),
                 )
@@ -257,16 +268,18 @@ def upsert_daily(report_date: str, employee_id: str, **kwargs) -> dict:
                     "reply_at": kwargs.get("reply_at"),
                     "thank_sent": int(kwargs.get("thank_sent") or 0),
                     "manager_reported": int(kwargs.get("manager_reported") or 0),
+                    "first_reply_text": kwargs.get("first_reply_text"),
+                    "awaiting_detail": int(kwargs.get("awaiting_detail") or 0),
                 }
                 conn.execute(
                     """INSERT INTO daily_reports
                        (id,report_date,employee_id,employee_name,phone,question_sent,question_sent_at,
-                        reply_text,reply_at,thank_sent,manager_reported)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                        reply_text,reply_at,thank_sent,manager_reported,first_reply_text,awaiting_detail)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     tuple(data[k] for k in (
                         "id", "report_date", "employee_id", "employee_name", "phone",
                         "question_sent", "question_sent_at", "reply_text", "reply_at",
-                        "thank_sent", "manager_reported",
+                        "thank_sent", "manager_reported", "first_reply_text", "awaiting_detail",
                     )),
                 )
             conn.commit()
@@ -307,7 +320,12 @@ def find_pending_reply(phone_digits: str) -> dict | None:
             for d in (today, yesterday):
                 rows = conn.execute(
                     """SELECT * FROM daily_reports WHERE report_date=? AND question_sent=1
-                       AND (reply_text IS NULL OR reply_text='') ORDER BY question_sent_at DESC""",
+                       AND thank_sent=0
+                       AND (
+                         awaiting_detail=1
+                         OR reply_text IS NULL OR reply_text=''
+                       )
+                       ORDER BY question_sent_at DESC""",
                     (d,),
                 ).fetchall()
                 for row in rows:
@@ -317,6 +335,65 @@ def find_pending_reply(phone_digits: str) -> dict | None:
             return None
         finally:
             conn.close()
+
+
+def employee_calendar(employee_id: str, year: int, month: int) -> dict[str, Any]:
+    import calendar
+
+    init_db()
+    emp = get_employee(employee_id)
+    if not emp:
+        return {"ok": False, "error": "موظف غير موجود"}
+
+    start = f"{year:04d}-{month:02d}-01"
+    if month == 12:
+        end = f"{year + 1:04d}-01-01"
+    else:
+        end = f"{year:04d}-{month + 1:02d}-01"
+
+    with _lock:
+        conn = connect()
+        try:
+            rows = conn.execute(
+                """SELECT * FROM daily_reports
+                   WHERE employee_id=? AND report_date >= ? AND report_date < ?
+                   ORDER BY report_date""",
+                (employee_id, start, end),
+            ).fetchall()
+            by_date = {r["report_date"]: dict(r) for r in rows}
+        finally:
+            conn.close()
+
+    days_in_month = calendar.monthrange(year, month)[1]
+    days = []
+    for day in range(1, days_in_month + 1):
+        ds = f"{year:04d}-{month:02d}-{day:02d}"
+        r = by_date.get(ds, {})
+        if r.get("reply_text"):
+            status = "replied"
+        elif int(r.get("awaiting_detail") or 0):
+            status = "detail"
+        elif r.get("question_sent"):
+            status = "pending"
+        else:
+            status = "none"
+        days.append({
+            "date": ds,
+            "day": day,
+            "weekday": calendar.weekday(year, month, day),
+            "status": status,
+            "reply_text": r.get("reply_text") or "",
+            "first_reply_text": r.get("first_reply_text") or "",
+            "question_sent": bool(r.get("question_sent")),
+        })
+
+    return {
+        "ok": True,
+        "employee": {"id": emp["id"], "name": emp["name"], "phone": emp["phone"]},
+        "year": year,
+        "month": month,
+        "days": days,
+    }
 
 
 def mark_manager_reported(report_date: str) -> None:
@@ -345,6 +422,8 @@ def _merge_daily_rows(report_date: str) -> list[dict]:
             "question_sent": int(r.get("question_sent") or 0),
             "question_sent_at": r.get("question_sent_at"),
             "reply_text": r.get("reply_text"),
+            "first_reply_text": r.get("first_reply_text"),
+            "awaiting_detail": int(r.get("awaiting_detail") or 0),
             "reply_at": r.get("reply_at"),
             "thank_sent": int(r.get("thank_sent") or 0),
             "manager_reported": int(r.get("manager_reported") or 0),

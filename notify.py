@@ -95,13 +95,38 @@ def send_message(message: str, phone: str, config: dict | None = None) -> dict[s
         raise RuntimeError("Green API: أضف instance_id و api_token")
 
     chat_id = phone if "@" in phone else normalize_phone(phone, default_country(cfg))
-    resp = requests.post(
-        f"{_api_base(inst)}/sendMessage/{token}",
-        json={"chatId": chat_id, "message": message},
-        timeout=60,
-    )
-    resp.raise_for_status()
+    url = f"{_api_base(inst)}/sendMessage/{token}"
+    resp = requests.post(url, json={"chatId": chat_id, "message": message}, timeout=60)
+    if resp.status_code == 466:
+        detail = _parse_green_466(resp)
+        raise RuntimeError(detail)
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as exc:
+        body = (resp.text or "")[:400]
+        raise RuntimeError(f"Green API ({resp.status_code}): {body or exc}") from exc
     return resp.json()
+
+
+def _parse_green_466(resp: requests.Response) -> str:
+    try:
+        data = resp.json()
+    except Exception:
+        return (
+            "خطأ 466 من Green API: تم تجاوز حد الخطة المجانية (Developer). "
+            "ترقِّ إلى Business من https://console.green-api.com"
+        )
+    parts = []
+    for key in ("invokeStatus", "correspondentsStatus", "quotaData"):
+        block = data.get(key)
+        if isinstance(block, dict) and block.get("description"):
+            parts.append(str(block["description"]))
+    if parts:
+        return "خطأ 466 — " + " ".join(parts)
+    return (
+        "خطأ 466: حد الخطة المجانية — مسموح 3 محادثات فقط شهرياً. "
+        "رقِّ الحساب إلى Business: https://console.green-api.com"
+    )
 
 
 def configure_webhook(public_base_url: str, config: dict | None = None) -> dict[str, Any]:

@@ -100,24 +100,50 @@ def handle_reply(phone: str, text: str) -> dict[str, Any]:
     if len(text) < 2:
         return {"ok": False, "skipped": True, "reason": "رسالة فارغة"}
 
+    settings = load_settings()
+    cfg = load_config()
+    phone_send = row.get("phone") or digits
+    follow_up = settings.get("follow_up_enabled", True)
+    awaiting = int(row.get("awaiting_detail") or 0)
+
+    if follow_up and not awaiting:
+        follow_msg = settings.get("follow_up_message") or "اكتب جميع مهامك اليوم في رسالة واحدة مفصّلة."
+        upsert_daily(
+            row["report_date"], row["employee_id"],
+            employee_name=row.get("employee_name", ""), phone=row.get("phone", ""),
+            question_sent=1,
+            first_reply_text=text,
+            awaiting_detail=1,
+        )
+        try:
+            send_message(follow_msg, phone_send, cfg)
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+        return {"ok": True, "employee": row.get("employee_name"), "stage": "follow_up_sent"}
+
+    final = text
+    if row.get("first_reply_text") and follow_up:
+        final = f"{row['first_reply_text'].strip()}\n---\n{text}"
+
     upsert_daily(
         row["report_date"], row["employee_id"],
         employee_name=row.get("employee_name", ""), phone=row.get("phone", ""),
-        question_sent=1, reply_text=text, reply_at=datetime.now(timezone.utc).isoformat(),
+        question_sent=1,
+        reply_text=final,
+        reply_at=datetime.now(timezone.utc).isoformat(),
+        awaiting_detail=0,
     )
 
-    settings = load_settings()
-    cfg = load_config()
     thank = settings.get("thank_message") or "شكراً لكم 🙏"
     thank_ok = False
     try:
-        send_message(thank, row.get("phone") or digits, cfg)
+        send_message(thank, phone_send, cfg)
         thank_ok = True
         upsert_daily(row["report_date"], row["employee_id"], thank_sent=1)
     except Exception:
         pass
 
-    return {"ok": True, "employee": row.get("employee_name"), "thank_sent": thank_ok}
+    return {"ok": True, "employee": row.get("employee_name"), "thank_sent": thank_ok, "stage": "completed"}
 
 
 def build_report_text(report_date: str) -> str:

@@ -1,12 +1,15 @@
 (function () {
   const { api, toast, esc, $, buildDayChips, getSelectedDays, setTime12, getTime24, initTime12Pickers } = WAApp;
 
-  let state = { dash: null, employees: [], dates: [], date: "" };
+  let state = { dash: null, employees: [], dates: [], date: "", cal: { empId: null, year: null, month: null, days: [] } };
+
+  const DOW = ["أحد", "إثنين", "ثلاثاء", "أربعاء", "خميس", "جمعة", "سبت"];
 
   function rowStatus(r) {
-    if (r.reply_text) return { cls: "ok", text: "ردّ", icon: "fa-check" };
-    if (r.question_sent) return { cls: "wait", text: "انتظار", icon: "fa-clock" };
-    return { cls: "none", text: "لم يُسأل", icon: "fa-minus" };
+    if (r.reply_text) return { cls: "ok", text: "مكتمل", icon: "fa-check", item: "replied" };
+    if (r.awaiting_detail) return { cls: "detail", text: "بانتظار التفصيل", icon: "fa-list", item: "detail" };
+    if (r.question_sent) return { cls: "wait", text: "انتظار", icon: "fa-clock", item: "pending" };
+    return { cls: "none", text: "لم يُسأل", icon: "fa-minus", item: "missing" };
   }
 
   function renderStats(d, containerId) {
@@ -15,7 +18,7 @@
     const cards = [
       { cls: "blue", icon: "fa-users", label: "الموظفون", value: d.employees_total },
       { cls: "green", icon: "fa-paper-plane", label: "أُرسل لهم", value: d.asked_count },
-      { cls: "wa-green", icon: "fa-reply", label: "ردّوا", value: d.replied_count },
+      { cls: "green", icon: "fa-reply", label: "ردّوا", value: d.replied_count },
       { cls: "orange", icon: "fa-percent", label: "نسبة الرد", value: `${d.reply_rate || 0}%` },
       { cls: "wait", icon: "fa-hourglass-half", label: "بانتظار", value: d.pending_count },
     ];
@@ -46,8 +49,11 @@
 
   function renderScheduleSummary(sched) {
     if (!sched) return;
+    const now = sched.now_local || "—";
     const nl = $("#now-local");
-    if (nl) nl.textContent = sched.now_local || "—";
+    if (nl) nl.textContent = now;
+    const side = $("#side-now");
+    if (side) side.textContent = now;
     const sl = $("#schedule-lines");
     if (!sl) return;
     const status = sched.enabled
@@ -71,15 +77,16 @@
     }
     el.innerHTML = list.map((r) => {
       const st = rowStatus(r);
+      const badgeCls = st.cls === "ok" ? "ok" : st.cls === "wait" ? "wait" : st.cls === "detail" ? "detail" : "";
       return `
-        <div class="report-item ${r.reply_text ? "replied" : r.question_sent ? "pending" : "missing"}">
+        <div class="report-item ${st.item}">
           <div class="avatar">${esc((r.employee_name || "?")[0])}</div>
           <div>
             <strong>${esc(r.employee_name)}</strong>
             <div class="muted"><i class="fab fa-whatsapp"></i> ${esc(r.phone || "")}</div>
-            ${r.reply_text ? `<div class="reply-box">${esc(r.reply_text)}</div>` : r.question_sent ? '<p class="muted">بانتظار الرد...</p>' : ""}
+            ${r.reply_text ? `<div class="reply-box">${esc(r.reply_text)}</div>` : r.first_reply_text ? `<div class="reply-box muted">رد أولي: ${esc(r.first_reply_text)}</div><p class="muted">بانتظار التفصيل الكامل...</p>` : r.question_sent ? '<p class="muted">بانتظار الرد...</p>' : ""}
           </div>
-          <span class="badge badge-${st.cls === "ok" ? "ok" : st.cls === "wait" ? "wait" : ""}"><i class="fas ${st.icon}"></i> ${st.text}</span>
+          <span class="badge badge-${badgeCls}"><i class="fas ${st.icon}"></i> ${st.text}</span>
         </div>`;
     }).join("");
   }
@@ -114,8 +121,9 @@
           <td><div class="emp-cell"><div class="avatar sm">${esc(e.name[0])}</div><strong>${esc(e.name)}</strong></div></td>
           <td dir="ltr">${esc(e.phone)}</td>
           <td>${esc(e.department || "—")}</td>
-          <td><span class="badge badge-${st.cls === "ok" ? "ok" : st.cls === "wait" ? "wait" : ""}">${esc(st.text)}</span></td>
+          <td><span class="badge badge-${st.cls === "ok" ? "ok" : st.cls === "wait" ? "wait" : st.cls === "detail" ? "detail" : ""}">${esc(st.text)}</span></td>
           <td class="emp-actions">
+            <button type="button" class="btn btn-outline btn-sm" data-cal="${e.id}" title="التقويم"><i class="fas fa-calendar"></i></button>
             <button type="button" class="btn btn-outline btn-sm" data-ask="${e.id}" title="إرسال سؤال"><i class="fas fa-paper-plane"></i></button>
             <button type="button" class="btn btn-outline btn-sm" data-edit="${e.id}" title="تعديل"><i class="fas fa-pen"></i></button>
             <button type="button" class="btn btn-danger btn-sm" data-del="${e.id}" title="حذف"><i class="fas fa-trash"></i></button>
@@ -143,6 +151,106 @@
         } catch (e) { toast(e.message, true); }
       };
     });
+    tbody.querySelectorAll("[data-cal]").forEach((b) => {
+      b.onclick = () => openCalendar(b.dataset.cal);
+    });
+  }
+
+  function updatePdfLink() {
+    const a = $("#btn-pdf");
+    if (a && state.date) {
+      a.href = `/api/reports/pdf?date=${encodeURIComponent(state.date)}`;
+      a.download = `report-${state.date}.pdf`;
+    }
+  }
+
+  async function openCalendar(empId) {
+    state.cal.empId = empId;
+    const sel = $("#cal-emp-select");
+    if (sel) sel.value = empId;
+    WALayout?.showPanel("employees");
+    const now = new Date();
+    await loadCalendar(empId, now.getFullYear(), now.getMonth() + 1);
+    $("#sec-calendar")?.scrollIntoView({ behavior: "smooth" });
+  }
+
+  async function loadCalendar(empId, year, month) {
+    const wrap = $("#cal-wrap");
+    if (!wrap || !empId) return;
+    wrap.innerHTML = '<p class="muted"><i class="fas fa-spinner fa-spin"></i> جاري التحميل...</p>';
+    try {
+      const data = await api(`/api/employees/${empId}/calendar?year=${year}&month=${month}`);
+      state.cal = { empId, year, month, days: data.days, employee: data.employee };
+      renderCalendar();
+    } catch (e) {
+      wrap.innerHTML = `<p class="empty">${esc(e.message)}</p>`;
+    }
+  }
+
+  function renderCalendar() {
+    const wrap = $("#cal-wrap");
+    const { year, month, days, employee } = state.cal;
+    if (!wrap || !days?.length) return;
+
+    const firstWd = days[0].weekday;
+    let cells = DOW.map((d) => `<div class="cal-dow">${d}</div>`).join("");
+    for (let i = 0; i < firstWd; i++) cells += '<div class="cal-day empty"></div>';
+    days.forEach((d) => {
+      cells += `<button type="button" class="cal-day ${d.status}${state.cal.selected === d.date ? " selected" : ""}" data-date="${d.date}">
+        ${d.day}${d.status !== "none" ? '<span class="dot"></span>' : ""}
+      </button>`;
+    });
+
+    wrap.innerHTML = `
+      <div class="cal-head">
+        <button type="button" class="btn btn-outline btn-sm" id="cal-prev"><i class="fas fa-chevron-right"></i></button>
+        <div class="cal-title">${esc(employee?.name || "")} — ${year}/${String(month).padStart(2, "0")}</div>
+        <button type="button" class="btn btn-outline btn-sm" id="cal-next"><i class="fas fa-chevron-left"></i></button>
+      </div>
+      <div class="cal-grid">${cells}</div>
+      <div class="cal-legend">
+        <span><i style="background:#6ee7b7"></i> رد مكتمل</span>
+        <span><i style="background:#93c5fd"></i> بانتظار التفصيل</span>
+        <span><i style="background:#fcd34d"></i> بانتظار رد</span>
+        <span><i style="background:#e2e8f0"></i> لا سجل</span>
+      </div>
+      <div class="cal-detail" id="cal-detail"><p class="muted">اضغط على يوم لعرض التفاصيل</p></div>`;
+
+    wrap.querySelectorAll(".cal-day[data-date]").forEach((btn) => {
+      btn.onclick = () => showCalDay(btn.dataset.date);
+    });
+    $("#cal-prev").onclick = () => {
+      let y = year, m = month - 1;
+      if (m < 1) { m = 12; y--; }
+      loadCalendar(state.cal.empId, y, m);
+    };
+    $("#cal-next").onclick = () => {
+      let y = year, m = month + 1;
+      if (m > 12) { m = 1; y++; }
+      loadCalendar(state.cal.empId, y, m);
+    };
+  }
+
+  function showCalDay(date) {
+    state.cal.selected = date;
+    const d = state.cal.days.find((x) => x.date === date);
+    const el = $("#cal-detail");
+    const wrap = $("#cal-wrap");
+    wrap?.querySelectorAll(".cal-day.selected").forEach((x) => x.classList.remove("selected"));
+    wrap?.querySelector(`.cal-day[data-date="${date}"]`)?.classList.add("selected");
+    if (!el || !d) return;
+    const labels = { replied: "رد مكتمل", detail: "بانتظار التفصيل", pending: "بانتظار رد", none: "لا سجل" };
+    el.innerHTML = `
+      <h4><i class="fas fa-calendar-day"></i> ${esc(date)} — ${labels[d.status] || ""}</h4>
+      ${d.reply_text ? `<pre>${esc(d.reply_text)}</pre>` : d.first_reply_text ? `<p class="muted">رد أولي:</p><pre>${esc(d.first_reply_text)}</pre>` : '<p class="muted">لا يوجد رد في هذا اليوم</p>'}`;
+  }
+
+  function fillEmpCalendarSelect() {
+    const sel = $("#cal-emp-select");
+    if (!sel) return;
+    const active = state.employees.filter((e) => e.active);
+    sel.innerHTML = '<option value="">— اختر موظف —</option>' + active.map((e) =>
+      `<option value="${e.id}">${esc(e.name)}</option>`).join("");
   }
 
   function openEditModal(id) {
@@ -169,6 +277,8 @@
     $("#manager-phone").value = settings.manager_phone || "";
     $("#company-name").value = settings.company_name || "";
     $("#ask-msg").value = settings.ask_message || "";
+    $("#follow-up-enabled").checked = settings.follow_up_enabled !== false;
+    $("#follow-up-msg").value = settings.follow_up_message || "";
     $("#thank-msg").value = settings.thank_message || "";
     $("#report-header").value = settings.manager_report_header || "";
     buildDayChips("days", settings.days_of_week);
@@ -226,9 +336,12 @@
     renderFeed(dash.rows, "#feed-overview", 5);
     fillSettings(settingsRes.settings, settingsRes.green_api);
     renderEmployeesTable($("#emp-search")?.value);
+    fillEmpCalendarSelect();
+    updatePdfLink();
     renderDates();
     const prev = $("#preview");
     if (prev) prev.textContent = preview.text || "—";
+    $("#conn-status")?.classList.remove("hidden");
   }
 
   $("#emp-form")?.addEventListener("submit", async (e) => {
@@ -266,6 +379,15 @@
 
   $("#emp-search")?.addEventListener("input", (e) => renderEmployeesTable(e.target.value));
 
+  $("#global-search")?.addEventListener("input", (e) => {
+    const q = e.target.value.trim();
+    if (!q) return;
+    WALayout?.showPanel("employees");
+    const empSearch = $("#emp-search");
+    if (empSearch) empSearch.value = q;
+    renderEmployeesTable(q);
+  });
+
   $("#save-settings")?.addEventListener("click", async () => {
     const btn = $("#save-settings");
     btn.disabled = true;
@@ -285,6 +407,8 @@
           manager_phone: $("#manager-phone").value.trim(),
           company_name: $("#company-name").value.trim(),
           ask_message: $("#ask-msg").value.trim(),
+          follow_up_enabled: $("#follow-up-enabled").checked,
+          follow_up_message: $("#follow-up-msg").value.trim(),
           thank_message: $("#thank-msg").value.trim(),
           manager_report_header: $("#report-header").value.trim(),
         }),
@@ -398,6 +522,10 @@
   $("#emp-modal")?.addEventListener("click", (e) => { if (e.target.id === "emp-modal") closeModal(); });
 
   window.addEventListener("wa-panel", () => refresh(state.date).catch(() => {}));
+
+  $("#cal-emp-select")?.addEventListener("change", (e) => {
+    if (e.target.value) openCalendar(e.target.value);
+  });
 
   $("#public-url").value = location.origin;
   initTime12Pickers();
